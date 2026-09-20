@@ -1,0 +1,82 @@
+# gitlab-values.yaml — YOUR OWN overrides for a minimal local GitLab install.
+
+global:
+  hosts:
+    domain: local.gitlab          # Access via http://gitlab.local.gitlab:8888
+    https: false                  # Disables HTTPS globally
+  
+  port: 8888                      # CRITICAL: Informs GitLab UI to construct links with :8888
+  edition: ce                     # Community Edition
+  
+  ingress:
+    enabled: true
+    class: traefik                # CRITICAL: Targets k3s's built-in Traefik Ingress
+    configureCertmanager: false   # Disables cert-manager integration
+    tls:
+      enabled: false              # Disables TLS on Ingresses
+    annotations:
+      # Traefik-specific entrypoint routing for HTTP
+      traefik.ingress.kubernetes.io/router.entrypoints: web
+
+  appConfig:
+    forceSSL: false
+
+# --- Registry HTTP fix ---
+registry:
+  certmanager: false
+
+certmanager-issuer:
+  email: you@example.com
+
+
+# --- Disable heavy optional components ---
+prometheus:
+  install: false
+
+grafana:
+  enabled: false
+
+gitlab-runner:
+  install: false                  # Enable later if you want CI runners
+
+# --- Core GitLab components: resource trimming ---
+gitlab:
+  webservice:
+    resources:
+      requests:
+        cpu: 300m
+        memory: 800Mi
+    minReplicas: 1
+    maxReplicas: 1
+
+  sidekiq:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 400Mi
+    minReplicas: 1
+    maxReplicas: 1
+
+  gitaly:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 300Mi
+    persistence:
+      size: 10Gi
+
+  gitlab-shell:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 100Mi
+
+  migrations:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 300Mi
+
+# --- Disable bundled NGINX in favor of k3s Traefik ---
+nginx-ingress:
+  enabled: false
