@@ -53,20 +53,17 @@ echo "=== Stage 1: K3d cluster — ONE port mapping only ==="
 if k3d cluster list | grep -q "^${CLUSTER_NAME} "; then
   echo "Cluster '${CLUSTER_NAME}' already exists — reusing it."
 else
-  k3d cluster create "$CLUSTER_NAME" --agents 1 \
+  k3d cluster create "$CLUSTER_NAME" --agent 1\
     --port "${PORT}:80@loadbalancer"
 fi
 kubectl get nodes -o wide
 
 # ------------------------------------------------------------------------------
 echo "=== Stage 2: Namespace ==="
-kubectl create namespace gitlab --dry-run=client -o yaml | kubectl apply -f -
+kubectl apply -f "$(dirname "$0")/../confs/namespace.yaml"
 
 # ------------------------------------------------------------------------------
 echo "=== Stage 3: GitLab external dependencies (Postgres / Redis / object storage) ==="
-# WORKDIR="$(pwd)/bonus"
-# mkdir -p "$WORKDIR"
-# cd "$WORKDIR"
 
 if [ ! -d gitlab ]; then
   git clone https://gitlab.com/gitlab-org/charts/gitlab.git
@@ -74,7 +71,7 @@ fi
 cd gitlab
 
 helm version   # must be v4+, dev_dependencies.sh requires it
-NAMESPACE=gitlab bash scripts/dev_dependencies.sh setup
+bash scripts/dev_dependencies.sh setup
 bash scripts/dev_dependencies.sh status
 cd ..
 
@@ -82,91 +79,25 @@ echo "Waiting for dependency pods..."
 sleep 10
 kubectl get pods -n gitlab
 
-# ------------------------------------------------------------------------------
-# echo "=== Stage 4: values.yaml — plain HTTP, no TLS, no cert-manager, no nginx-ingress ==="
-# cat > gitlab-values.yaml << EOF
-# # HTTP-only local GitLab install.
-# # TLS/cert-manager deliberately OFF:
-# #   - ACME cannot verify a fake local domain like ${DOMAIN} (HTTP-01
-# #     challenge requires a real, internet-reachable domain) -> stuck forever.
-# #   - Self-signed certs work but need a second (443) port mapping and add
-# #     complexity not required for grading -> skipped in favor of one port.
-
-# global:
-#   hosts:
-#     domain: ${DOMAIN}
-#     https: false
-
-#   edition: ce
-
-#   gatewayApi:
-#     enabled: true
-#     configureCertmanager: false   # do NOT let the chart create an ACME Issuer
-
-#   ingress:
-#     enabled: false                 # legacy Ingress path unused; Gateway API is primary
-#     configureCertmanager: false
-
-# # Top-level flag: forces GitLab's fallback (no cert-manager wiring at all),
-# # the setting that actually resolves the ACME dead-end.
-# installCertmanager: false
-
-# certmanager-issuer:
-#   email: you@example.com           # required field, unused by this path
-
-# # Heavy/optional components not needed for this exercise
-# prometheus:
-#   install: false
-# grafana:
-#   enabled: false
-# gitlab-runner:
-#   install: false
-
-# # Redundant with Envoy Gateway (Gateway API) and collides with Traefik
-# # (K3s's default Ingress controller) on ports 80/443 if left enabled.
-# nginx-ingress:
-#   enabled: false
-
-# # Trimmed resource requests to fit a small VM
-# gitlab:
-#   webservice:
-#     resources:
-#       requests: { cpu: 300m, memory: 800Mi }
-#     minReplicas: 1
-#     maxReplicas: 1
-#   sidekiq:
-#     resources:
-#       requests: { cpu: 100m, memory: 400Mi }
-#     minReplicas: 1
-#     maxReplicas: 1
-#   gitaly:
-#     resources:
-#       requests: { cpu: 100m, memory: 300Mi }
-#     persistence:
-#       size: 10Gi
-#   gitlab-shell:
-#     resources:
-#       requests: { cpu: 50m, memory: 100Mi }
-#   migrations:
-#     resources:
-#       requests: { cpu: 100m, memory: 300Mi }
-# EOF
-
-# ------------------------------------------------------------------------------
-# echo "=== Stage 4: Helm repo ==="
-# helm repo add gitlab https://charts.gitlab.io/
-# helm repo update
+echo "=== Stage 4: Gateway API / Envoy Gateway CRDs (idempotent, avoids field-manager conflicts) ==="
+helm template eg-crds oci://docker.io/envoyproxy/gateway-crds-helm \
+  --version v1.9.1 \
+  --set crds.gatewayAPI.enabled=true \
+  --set crds.envoyGateway.enabled=true \
+  | kubectl apply --server-side --force-conflicts -f -
 
 echo "=== Stage 5: Install (or upgrade) GitLab ==="
 if helm status gitlab -n gitlab >/dev/null 2>&1; then
   helm upgrade gitlab gitlab/gitlab -n gitlab \
     -f gitlab/.values/dev-external.values.yaml \
-    -f gitlab-values.yaml \
+    -f "$(dirname "$0")/../confs/gitlab-values.yaml" \
+    --skip-crds \
     --timeout 900s
 else
   helm install gitlab gitlab/gitlab -n gitlab \
     -f gitlab/.values/dev-external.values.yaml \
-    -f gitlab-values.yaml \
+    -f "$(dirname "$0")/../confs/gitlab-values.yaml" \
+    --skip-crds \
     --timeout 900s
 fi
 
@@ -182,9 +113,6 @@ read -p "Press Enter once all GitLab pods show Running/Completed..."
 kubectl get pods -n gitlab
 kubectl get jobs -n gitlab
 
-# If the chart still generates a forced HTTP->HTTPS redirect route despite
-# https:false, remove it so GitLab stays reachable over plain HTTP:
-# kubectl delete httproute gitlab-http-redirect -n gitlab --ignore-not-found
 
 # ------------------------------------------------------------------------------
 echo "=== Stage 6: /etc/hosts ==="

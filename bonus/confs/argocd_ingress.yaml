@@ -1,17 +1,17 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: playground-ingress
-  namespace: dev
+  name: argocd-ingress
+  namespace: argocd
 spec:
   rules:
-    - host: wil-playground
+    - host: argocd
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: wil-playground-svc
+                name: argocd-server
                 port:
-                  number: 8888
+                  number: 80

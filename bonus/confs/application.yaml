@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: http://gitlab-webservice-default.gitlab.svc.cluster.local:8181/root/iot.git
+    repoURL: http://gitlab-webservice-default.gitlab.svc.cluster.local:8181/root/mezzine.git
     targetRevision: main
     path: manifests
   destination:
