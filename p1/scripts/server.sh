@@ -16,12 +16,13 @@ until [ -f /var/lib/rancher/k3s/server/node-token ]; do
 done
 
 # HOSTNAME="$(hostname)"
+HOSTNAME="$(hostname | tr '[:upper:]' '[:lower:]')"
 
-# until kubectl get node "$HOSTNAME" >/dev/null 2>&1; do
-#     sleep 2
-# done
+until kubectl get node "$HOSTNAME" >/dev/null 2>&1; do
+    sleep 2
+done
 
-# kubectl label node "$HOSTNAME" node-role.kubernetes.io/master=true --overwrite
+kubectl label node "$HOSTNAME" node-role.kubernetes.io/master=true --overwrite
 
 echo "alias k='kubectl'" >> /home/vagrant/.bashrc
 
