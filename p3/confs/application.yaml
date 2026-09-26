@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/EzzineMehdi/mezzineCI.git
+    repoURL: https://github.com/EzzineMehdi/mezzine.git
     targetRevision: main
     path: .
   destination:

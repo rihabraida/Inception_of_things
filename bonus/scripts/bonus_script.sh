@@ -53,7 +53,7 @@ echo "=== Stage 1: K3d cluster — ONE port mapping only ==="
 if k3d cluster list | grep -q "^${CLUSTER_NAME} "; then
   echo "Cluster '${CLUSTER_NAME}' already exists — reusing it."
 else
-  k3d cluster create "$CLUSTER_NAME" --agent 1\
+  k3d cluster create "$CLUSTER_NAME" --servers 1 --agents 1\
     --port "${PORT}:80@loadbalancer"
 fi
 kubectl get nodes -o wide
